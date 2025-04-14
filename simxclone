@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Assign arguments to variables
+GIT_URL="$1"
+DESTINATION="${2:-$HOME}"
+GIT_USER="${3:-}"
+GIT_TOKEN="${4:-}"
+
+# Function to validate Git URL
+validate_git_url() {
+    local url=$1
+    # Check if URL matches basic Git URL patterns (HTTP/HTTPS or SSH)
+    if [[ $url =~ ^(https?://|git@)[^[:space:]]+(\.git)?$ ]]; then
+        # Add .git if not present
+        if [[ ! $url =~ \.git$ ]]; then
+            url="${url}.git"
+        fi
+        return 0  # Valid URL
+    else
+        return 1  # Invalid URL
+    fi
+}
+
+# Function to extract repo name from URL
+get_repo_name() {
+    local url=$1
+    # Extract the last part after '/' and remove .git if present
+    basename "$url" .git
+}
+
+# Check if required argument is provided
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <git_url> [git_user] [git_token]"
+    echo "No clone"
+    exit 0
+fi
+
+
+
+# Validate Git URL
+if ! validate_git_url "$GIT_URL"; then
+    echo "Error: Invalid Git URL: $GIT_URL"
+    echo "No clone"
+    exit 0
+fi
+
+# Get repository name from URL
+REPO_NAME=$(get_repo_name "$GIT_URL")
+
+# Check if repository already exists locally
+if [ -d "$REPO_NAME" ]; then
+    echo "Repository '$REPO_NAME' already exists locally. Skipping clone."
+    exit 0
+fi
+
+# Clone the repository
+echo "Cloning repository from $GIT_URL..."
+cd $DESTINATION
+if [ -n "$GIT_USER" ] && [ -n "$GIT_TOKEN" ]; then
+    # Modify URL to include credentials for HTTPS
+    if [[ $GIT_URL =~ ^https:// ]]; then
+        PROTOCOL=$(echo "$GIT_URL" | cut -d'/' -f1-3)
+        REPO_PATH=$(echo "$GIT_URL" | cut -d'/' -f4-)
+        AUTH_URL="${PROTOCOL//:\/\//://$GIT_USER:$GIT_TOKEN@}/$REPO_PATH"
+
+        git clone "$AUTH_URL" || {
+            echo "Error: Failed to clone repository"
+            exit 0
+        }
+    else
+        # For SSH URLs, we'll use the URL as is and assume token is SSH key
+        git clone "$GIT_URL" || {
+            echo "Error: Failed to clone repository"
+            exit 0
+        }
+    fi
+else
+    # Clone without credentials
+    git clone "$GIT_URL" || {
+        echo "Error: Failed to clone repository"
+        exit 0
+    }
+fi
+
+echo "Successfully cloned repository to $REPO_NAME"
+exit 0
